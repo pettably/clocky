@@ -1,0 +1,313 @@
+substitutions:
+
+# Device customization
+
+  name: clocky
+  friendly_name: Clocky
+  background_color: '000000'
+
+
+# Other settings
+
+  allowed_characters: " ¿?¡!#%'()+,-./:°0123456789ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuvwxyzáéíóú"
+
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  platformio_options:
+    upload_speed: 921600
+    build_unflags: -Werror=all
+    board_build.flash_mode: dio
+    board_build.f_flash: 80000000L
+    board_build.f_cpu: 240000000L
+
+psram:
+  mode: octal
+  speed: 120MHz
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+# Must import the custom component for diplay
+
+external_components:
+  - source: github://pettably/clocky
+    components: [axs15231]
+
+# Enable logging
+logger:
+
+
+# WiFi configuration
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Clocky Fallback Hotspot"
+    password: "fallback"
+
+captive_portal:
+
+# Fonts
+
+font:
+  - file: "gfonts://Space Grotesk"
+    id: clock_time
+    size: 50
+    glyphs: ${allowed_characters}
+  - file: "gfonts://Space Grotesk"
+    id: clock_date
+    size: 40
+    glyphs: ${allowed_characters}
+  - file: "gfonts://Roboto"
+    id: info
+    size: 20
+    glyphs: ${allowed_characters}
+  - file: "gfonts://Roboto"
+    id: title
+    size: 25
+    glyphs: ${allowed_characters}
+  - file: "gfonts://Space Grotesk"
+    id: big_numbers
+    size: 120
+    glyphs: ${allowed_characters}
+
+# Colours
+
+color:
+  - id: background_color
+    hex: ${background_color}
+
+  - id: orange
+    hex: 'e9c726'
+  - id: white
+    hex: 'ffffff'
+  - id: dirty_white
+    hex: 'c6c6c6'
+  - id: grey
+    hex: '222222'
+  - id: light_grey
+    hex: '444444'
+  - id: lime
+    hex: 'deff00'
+  - id: crimson
+    hex: 'f3528f'
+  - id: blue
+    hex: '52c0f3'
+  - id: dark_blue
+    hex: '1d85b6'
+  - id: magenta
+    hex: 'a91225'
+  - id: dark_magenta
+    hex: '440109'
+
+
+
+# Icons
+
+  - file: hourglass.png
+    id: icon_hourglass
+  - file: interval.png
+    id: icon_interval
+  - file: stopwatch.png
+    id: icon_stopwatch
+  - file: tomato.png
+    id: icon_tomato
+  - file: hourglass_on.png
+    id: icon_hourglass_on
+  - file: interval_on.png
+    id: icon_interval_on
+  - file: stopwatch_on.png
+    id: icon_stopwatch_on
+  - file: tomato_on.png
+    id: icon_tomato_on
+  - file: play.png
+    id: icon_play
+  - file: pause.png
+    id: icon_pause
+  - file: stop.png
+    id: icon_stop
+
+
+# NTP Time server
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Australia/Melbourne
+    servers:
+     - 0.pool.ntp.org
+     - 1.pool.ntp.org
+     - 2.pool.ntp.org
+
+# Display set-up
+
+spi:
+  - id: display_qspi
+    type: quad
+    clk_pin: 17
+    data_pins:
+      - 13
+      - 18
+      - 21
+      - 14
+
+i2c:
+  sda: 15
+  scl: 10
+  id: touchscreen_bus
+
+touchscreen:
+  - platform: axs15231
+    id: main_touch
+    display: main_display
+    i2c_id: touchscreen_bus
+    transform:
+      swap_xy: true
+    on_touch:
+      - lambda: |-
+          ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
+            touch.x,
+            touch.y,
+            touch.x_raw,
+            touch.y_raw
+          );
+
+
+binary_sensor:
+
+  - platform: touchscreen
+    name: Stopwatch button
+    internal: true
+    x_min: 103
+    x_max: 153
+    y_min: 130
+    y_max: 180
+    on_press:
+      then:
+          - display.page.show: stopwatch
+
+  - platform: touchscreen
+    name: Timer button
+    internal: true
+    x_min: 231
+    x_max: 281
+    y_min: 130
+    y_max: 180
+    on_press:
+      then:
+          - display.page.show: timer
+
+  - platform: touchscreen
+    name: Interval button
+    internal: true
+    x_min: 359
+    x_max: 409
+    y_min: 130
+    y_max: 180
+    on_press:
+      then:
+          - display.page.show: interval
+
+  - platform: touchscreen
+    name: Tomato button
+    internal: true
+    x_min: 487
+    x_max: 537
+    y_min: 130
+    y_max: 180
+    on_press:
+      then:
+          - display.page.show: tomato
+
+output:
+  - platform: ledc
+    pin: GPIO1
+    id: backlight_pwm
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: Display
+    id: backlight
+    restore_mode: ALWAYS_ON
+    internal: True
+
+display:
+  - platform: axs15231
+    id: main_display
+    spi_id: display_qspi
+    dimensions:
+      height: 640
+      width: 180
+    cs_pin: 12
+    reset_pin: 16
+    transform:
+      swap_xy: false
+    rotation: 90
+    auto_clear_enabled: false
+    pages:
+      - id: home
+        lambda: |-
+          it.fill(id(background_color));
+
+          it.strftime(300, 10, id(clock_time), TextAlign::CENTER, "%H:%M", id(esptime).now());
+          it.strftime(300, 60, id(clock_date), TextAlign::CENTER, "%d/%m/%y", id(esptime).now());
+
+          it.image(103, 130, id(icon_hourglass));
+          it.image(231, 130, id(icon_interval));
+          it.image(359, 130, id(icon_stopwatch));
+          it.image(487, 130, id(icon_tomato));
+
+      - id: stopwatch
+        lambda: |-
+          it.fill(id(background_color));
+
+
+          it.image(50, 65, id(icon_pause));
+          it.image(590, 65, id(icon_stop));
+
+          it.image(103, 130, id(icon_hourglass));
+          it.image(231, 130, id(icon_interval));
+          it.image(359, 130, id(icon_stopwatch_on));
+          it.image(487, 130, id(icon_tomato));
+
+      - id: timer
+        lambda: |-
+          it.fill(id(background_color));
+
+          it.image(50, 65, id(icon_pause));
+          it.image(590, 65, id(icon_stop));
+
+          it.image(103, 130, id(icon_hourglass_on));
+          it.image(231, 130, id(icon_interval));
+          it.image(359, 130, id(icon_stopwatch));
+          it.image(487, 130, id(icon_tomato));
+
+      - id: interval
+        lambda: |-
+          it.fill(id(background_color));
+
+          it.image(50, 65, id(icon_pause));
+          it.image(590, 65, id(icon_stop));
+
+          it.image(103, 130, id(icon_hourglass));
+          it.image(231, 130, id(icon_interval_on));
+          it.image(359, 130, id(icon_stopwatch));
+          it.image(487, 130, id(icon_tomato));
+
+      - id: tomato
+        lambda: |-
+          it.fill(id(background_color));
+
+          it.image(103, 130, id(icon_hourglass));
+          it.image(231, 130, id(icon_interval));
+          it.image(359, 130, id(icon_stopwatch));
+          it.image(487, 130, id(icon_tomato_on));
