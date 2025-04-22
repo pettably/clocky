@@ -30,8 +30,11 @@ esp32:
 # Must import the custom component for diplay
 
 external_components:
-  - source: github://pettably/clocky
-    components: [axs15231]
+  - source:
+      type: git
+      url: https://github.com/pettably/clocky
+      ref: main
+    components: [ axs15231 ]
 
 # Enable logging
 logger:
@@ -72,83 +75,6 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
-
-# INTERVAL
-binary_sensor:
-  - platform: touchscreen
-    name: Start Timer
-    internal: true
-    x_min: 50
-    x_max: 100
-    y_min: 65
-    y_max: 115
-    on_press:
-      then:
-        - lambda: |-
-            if (id(timer_time) > 0) {
-              id(timer_running) = true;
-            }
-
-  - platform: touchscreen
-    name: Reset Timer
-    internal: true
-    x_min: 590
-    x_max: 640
-    y_min: 65
-    y_max: 115
-    on_press:
-      then:
-        - lambda: |-
-            id(timer_time) = 0;
-            id(timer_running) = false;
-
-  - platform: touchscreen
-    name: Set Timer 1 Min
-    internal: true
-    x_min: 100
-    x_max: 150
-    y_min: 200
-    y_max: 250
-    on_press:
-      then:
-        - lambda: |-
-            id(timer_time) = 60;
-
-  - platform: touchscreen
-    name: Set Timer 2 Min
-    internal: true
-    x_min: 200
-    x_max: 250
-    y_min: 200
-    y_max: 250
-    on_press:
-      then:
-        - lambda: |-
-            id(timer_time) = 120;
-
-  - platform: touchscreen
-    name: Set Timer 3 Min
-    internal: true
-    x_min: 300
-    x_max: 350
-    y_min: 200
-    y_max: 250
-    on_press:
-      then:
-        - lambda: |-
-            id(timer_time) = 180;
-
-  - platform: touchscreen
-    name: Set Timer 5 Min
-    internal: true
-    x_min: 400
-    x_max: 450
-    y_min: 200
-    y_max: 250
-    on_press:
-      then:
-        - lambda: |-
-            id(timer_time) = 300;
        
 # INTERVAL
 
@@ -671,7 +597,80 @@ binary_sensor:
       then:
           - display.page.show: tomato
 
-  
+  - platform: touchscreen
+    name: Start Timer
+    internal: true
+    x_min: 50
+    x_max: 100
+    y_min: 65
+    y_max: 115
+    on_press:
+      then:
+        - lambda: |-
+            if (id(timer_time) > 0) {
+              id(timer_running) = true;
+            }
+
+  - platform: touchscreen
+    name: Reset Timer
+    internal: true
+    x_min: 590
+    x_max: 640
+    y_min: 65
+    y_max: 115
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 0;
+            id(timer_running) = false;
+
+  - platform: touchscreen
+    name: Set Timer 1 Min
+    internal: true
+    x_min: 100
+    x_max: 150
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 60;
+
+  - platform: touchscreen
+    name: Set Timer 2 Min
+    internal: true
+    x_min: 200
+    x_max: 250
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 120;
+
+  - platform: touchscreen
+    name: Set Timer 3 Min
+    internal: true
+    x_min: 300
+    x_max: 350
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 180;
+
+  - platform: touchscreen
+    name: Set Timer 5 Min
+    internal: true
+    x_min: 400
+    x_max: 450
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 300;
 
 output:
   - platform: ledc
