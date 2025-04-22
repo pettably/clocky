@@ -7,11 +7,6 @@ substitutions:
   background_color: '000000'
 
 
-# Other settings
-
-  allowed_characters: " ¿?¡!#%'()+,-./:°0123456789ABCDEFGHIJKLMNOPQRSTUVWYZabcdefghijklmnopqrstuvwxyzáéíóú"
-
-
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
@@ -55,29 +50,275 @@ wifi:
 
 captive_portal:
 
+globals:
+
+# STOPWATCH
+
+  - id: stopwatch_time
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: stopwatch_running
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+# TIMER
+  - id: timer_time
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: timer_running
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+# INTERVAL
+binary_sensor:
+  - platform: touchscreen
+    name: Start Timer
+    internal: true
+    x_min: 50
+    x_max: 100
+    y_min: 65
+    y_max: 115
+    on_press:
+      then:
+        - lambda: |-
+            if (id(timer_time) > 0) {
+              id(timer_running) = true;
+            }
+
+  - platform: touchscreen
+    name: Reset Timer
+    internal: true
+    x_min: 590
+    x_max: 640
+    y_min: 65
+    y_max: 115
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 0;
+            id(timer_running) = false;
+
+  - platform: touchscreen
+    name: Set Timer 1 Min
+    internal: true
+    x_min: 100
+    x_max: 150
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 60;
+
+  - platform: touchscreen
+    name: Set Timer 2 Min
+    internal: true
+    x_min: 200
+    x_max: 250
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 120;
+
+  - platform: touchscreen
+    name: Set Timer 3 Min
+    internal: true
+    x_min: 300
+    x_max: 350
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 180;
+
+  - platform: touchscreen
+    name: Set Timer 5 Min
+    internal: true
+    x_min: 400
+    x_max: 450
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 300;
+       
+# INTERVAL
+
+  - id: interval_work_time
+    type: int
+    restore_value: no
+    initial_value: '60'  # Default work time: 1 minute
+  - id: interval_rest_time
+    type: int
+    restore_value: no
+    initial_value: '30'  # Default rest time: 30 seconds
+  - id: interval_repetitions
+    type: int
+    restore_value: no
+    initial_value: '1'  # Default repetitions: 1 cycle
+  - id: interval_current_time
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: interval_current_cycle
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: interval_is_work
+    type: bool
+    restore_value: no
+    initial_value: 'true'
+  - id: interval_running
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+# POMODORO
+
+  - id: pomodoro_work_time
+    type: int
+    restore_value: no
+    initial_value: '1500'  # 25 minutes in seconds
+  - id: pomodoro_rest_time
+    type: int
+    restore_value: no
+    initial_value: '300'  # 5 minutes in seconds
+  - id: pomodoro_current_time
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: pomodoro_current_cycle
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: pomodoro_is_work
+    type: bool
+    restore_value: no
+    initial_value: 'true'
+  - id: pomodoro_running
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+
+interval:
+
+# STOPWATCH
+
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(stopwatch_running);'
+          then:
+            - lambda: |-
+                id(stopwatch_time) += 1;
+
+# TIMER
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(timer_running) && id(timer_time) > 0;'
+          then:
+            - lambda: |-
+                id(timer_time) -= 1;
+      - if:
+          condition:
+            lambda: 'return id(timer_time) == 0 && id(timer_running);'
+          then:
+            - lambda: |-
+                id(timer_running) = false;
+
+# INTERVAL
+
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(interval_running) && id(interval_current_time) > 0;'
+          then:
+            - lambda: |-
+                id(interval_current_time) -= 1;
+      - if:
+          condition:
+            lambda: 'return id(interval_running) && id(interval_current_time) == 0;'
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(interval_is_work);'
+                then:
+                  - lambda: |-
+                      id(interval_is_work) = false;
+                      id(interval_current_time) = id(interval_rest_time);
+                else:
+                  - lambda: |-
+                      id(interval_current_cycle) += 1;
+                      if (id(interval_current_cycle) < id(interval_repetitions)) {
+                        id(interval_is_work) = true;
+                        id(interval_current_time) = id(interval_work_time);
+                      } else {
+                        id(interval_running) = false;
+                      }
+
+# POMODORO
+
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(pomodoro_running) && id(pomodoro_current_time) > 0;'
+          then:
+            - lambda: |-
+                id(pomodoro_current_time) -= 1;
+      - if:
+          condition:
+            lambda: 'return id(pomodoro_running) && id(pomodoro_current_time) == 0;'
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(pomodoro_is_work);'
+                then:
+                  - lambda: |-
+                      id(pomodoro_is_work) = false;
+                      id(pomodoro_current_time) = id(pomodoro_rest_time);
+                else:
+                  - lambda: |-
+                      id(pomodoro_current_cycle) += 1;
+                      if (id(pomodoro_current_cycle) < 4) {
+                        id(pomodoro_is_work) = true;
+                        id(pomodoro_current_time) = id(pomodoro_work_time);
+                      } else {
+                        id(pomodoro_running) = false;
+                      }
+
 # Fonts
 
 font:
   - file: "gfonts://Space Grotesk"
     id: clock_time
     size: 50
-    glyphs: ${allowed_characters}
   - file: "gfonts://Space Grotesk"
     id: clock_date
     size: 40
-    glyphs: ${allowed_characters}
   - file: "gfonts://Roboto"
     id: info
     size: 20
-    glyphs: ${allowed_characters}
   - file: "gfonts://Roboto"
     id: title
     size: 25
-    glyphs: ${allowed_characters}
   - file: "gfonts://Space Grotesk"
     id: big_numbers
     size: 120
-    glyphs: ${allowed_characters}
+
 
 # Colours
 
@@ -112,27 +353,27 @@ color:
 
 # Icons
 
-  - file: hourglass.png
+  - file: 'images/hourglass.png'
     id: icon_hourglass
-  - file: interval.png
+  - file: 'images/interval.png'
     id: icon_interval
-  - file: stopwatch.png
+  - file: 'images/stopwatch.png'
     id: icon_stopwatch
-  - file: tomato.png
+  - file: 'images/tomato.png'
     id: icon_tomato
-  - file: hourglass_on.png
-    id: icon_hourglass_on
-  - file: interval_on.png
-    id: icon_interval_on
-  - file: stopwatch_on.png
-    id: icon_stopwatch_on
-  - file: tomato_on.png
-    id: icon_tomato_on
-  - file: play.png
+  - file: 'images/hourglass_off.png'
+    id: icon_hourglass_off
+  - file: 'images/interval_off.png'
+    id: icon_interval_off
+  - file: 'images/stopwatch_off.png'
+    id: icon_stopwatch_off
+  - file: 'images/tomato_off.png'
+    id: icon_tomato_off
+  - file: 'images/play.png'
     id: icon_play
-  - file: pause.png
+  - file: 'images/pause.png'
     id: icon_pause
-  - file: stop.png
+  - file: 'images/stop.png'
     id: icon_stop
 
 
@@ -183,6 +424,8 @@ touchscreen:
 
 binary_sensor:
 
+# STOPWATCH
+
   - platform: touchscreen
     name: Stopwatch button
     internal: true
@@ -193,6 +436,33 @@ binary_sensor:
     on_press:
       then:
           - display.page.show: stopwatch
+
+  - platform: touchscreen
+    name: Start/Pause Stopwatch
+    internal: true
+    x_min: 50
+    x_max: 100
+    y_min: 65
+    y_max: 115
+    on_press:
+      then:
+        - lambda: |-
+            id(stopwatch_running) = !id(stopwatch_running);
+
+  - platform: touchscreen
+    name: Reset Stopwatch
+    internal: true
+    x_min: 590
+    x_max: 640
+    y_min: 65
+    y_max: 115
+    on_press:
+      then:
+        - lambda: |-
+            id(stopwatch_time) = 0;
+            id(stopwatch_running) = false;
+
+# TIMER
 
   - platform: touchscreen
     name: Timer button
@@ -206,6 +476,83 @@ binary_sensor:
           - display.page.show: timer
 
   - platform: touchscreen
+    name: Start Timer
+    internal: true
+    x_min: 50
+    x_max: 100
+    y_min: 65
+    y_max: 115
+    on_press:
+      then:
+        - lambda: |-
+            if (id(timer_time) > 0) {
+              id(timer_running) = true;
+            }
+
+  - platform: touchscreen
+    name: Reset Timer
+    internal: true
+    x_min: 590
+    x_max: 640
+    y_min: 65
+    y_max: 115
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 0;
+            id(timer_running) = false;
+
+  - platform: touchscreen
+    name: Set Timer 1 Min
+    internal: true
+    x_min: 100
+    x_max: 150
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 60;
+
+  - platform: touchscreen
+    name: Set Timer 2 Min
+    internal: true
+    x_min: 200
+    x_max: 250
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 120;
+
+  - platform: touchscreen
+    name: Set Timer 3 Min
+    internal: true
+    x_min: 300
+    x_max: 350
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 180;
+
+  - platform: touchscreen
+    name: Set Timer 5 Min
+    internal: true
+    x_min: 400
+    x_max: 450
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(timer_time) = 300;
+
+# INTERVAL
+
+  - platform: touchscreen
     name: Interval button
     internal: true
     x_min: 359
@@ -215,6 +562,103 @@ binary_sensor:
     on_press:
       then:
           - display.page.show: interval
+
+  # Start/Stop Interval Timer
+  - platform: touchscreen
+    name: Start/Stop Interval Timer
+    internal: true
+    x_min: 50
+    x_max: 100
+    y_min: 65
+    y_max: 115
+    on_press:
+      then:
+        - lambda: |-
+            if (id(interval_running)) {
+              id(interval_running) = false;
+            } else {
+              id(interval_running) = true;
+              id(interval_is_work) = true;
+              id(interval_current_time) = id(interval_work_time);
+              id(interval_current_cycle) = 0;
+            }
+
+  # Set Work Time
+  - platform: touchscreen
+    name: Set Work Time 1 Min
+    internal: true
+    x_min: 100
+    x_max: 150
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(interval_work_time) = 60;
+
+  - platform: touchscreen
+    name: Set Work Time 2 Min
+    internal: true
+    x_min: 200
+    x_max: 250
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(interval_work_time) = 120;
+
+  - platform: touchscreen
+    name: Set Rest Time 30 Sec
+    internal: true
+    x_min: 300
+    x_max: 350
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(interval_rest_time) = 30;
+
+  - platform: touchscreen
+    name: Set Rest Time 1 Min
+    internal: true
+    x_min: 400
+    x_max: 450
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(interval_rest_time) = 60;
+
+  # Set Repetitions
+  - platform: touchscreen
+    name: Set Reps 1
+    internal: true
+    x_min: 500
+    x_max: 550
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(interval_repetitions) = 1;
+
+  - platform: touchscreen
+    name: Set Reps 2
+    internal: true
+    x_min: 600
+    x_max: 650
+    y_min: 200
+    y_max: 250
+    on_press:
+      then:
+        - lambda: |-
+            id(interval_repetitions) = 2;
+
+
+# TOMATO
 
   - platform: touchscreen
     name: Tomato button
@@ -226,6 +670,8 @@ binary_sensor:
     on_press:
       then:
           - display.page.show: tomato
+
+  
 
 output:
   - platform: ledc
@@ -258,8 +704,8 @@ display:
         lambda: |-
           it.fill(id(background_color));
 
-          it.strftime(300, 10, id(clock_time), TextAlign::CENTER, "%H:%M", id(esptime).now());
-          it.strftime(300, 60, id(clock_date), TextAlign::CENTER, "%d/%m/%y", id(esptime).now());
+          it.strftime(300, 10, id(clock_time), TextAlign::CENTER, "%H:%M", id(sntp_time).now());
+          it.strftime(300, 60, id(clock_date), TextAlign::CENTER, "%d/%m/%y", id(sntp_time).now());
 
           it.image(103, 130, id(icon_hourglass));
           it.image(231, 130, id(icon_interval));
@@ -270,44 +716,114 @@ display:
         lambda: |-
           it.fill(id(background_color));
 
+          // Display stopwatch time
+          int minutes = id(stopwatch_time) / 60;
+          int seconds = id(stopwatch_time) % 60;
+          char time_str[6];
+          sprintf(time_str, "%02d:%02d", minutes, seconds);
+          it.print(100, 65, id(big_numbers), TextAlign::CENTER, time_str);
 
-          it.image(50, 65, id(icon_pause));
-          it.image(590, 65, id(icon_stop));
+          // Display control icons
+          it.image(50, 65, id(icon_pause));  // Pause button
+          it.image(590, 65, id(icon_stop));  // Stop button
 
-          it.image(103, 130, id(icon_hourglass));
-          it.image(231, 130, id(icon_interval));
-          it.image(359, 130, id(icon_stopwatch_on));
-          it.image(487, 130, id(icon_tomato));
+          it.image(103, 130, id(icon_hourglass_off));
+          it.image(231, 130, id(icon_interval_off));
+          it.image(359, 130, id(icon_stopwatch));
+          it.image(487, 130, id(icon_tomato_off));
 
       - id: timer
         lambda: |-
           it.fill(id(background_color));
 
-          it.image(50, 65, id(icon_pause));
-          it.image(590, 65, id(icon_stop));
+          // Display timer time
+          int hours = id(timer_time) / 3600;
+          int minutes = (id(timer_time) % 3600) / 60;
+          int seconds = id(timer_time) % 60;
+          char time_str[9];
+          sprintf(time_str, "%02d:%02d:%02d", hours, minutes, seconds);
+          it.print(300, 100, id(big_numbers), TextAlign::CENTER, time_str);
 
-          it.image(103, 130, id(icon_hourglass_on));
-          it.image(231, 130, id(icon_interval));
-          it.image(359, 130, id(icon_stopwatch));
-          it.image(487, 130, id(icon_tomato));
+          // Display control icons
+          it.image(50, 65, id(icon_play));  // Start button
+          it.image(590, 65, id(icon_stop));  // Reset button
+
+          // Display timer options
+          it.print(100, 200, id(info), TextAlign::LEFT, "1 Min");
+          it.print(200, 200, id(info), TextAlign::LEFT, "2 Min");
+          it.print(300, 200, id(info), TextAlign::LEFT, "3 Min");
+          it.print(400, 200, id(info), TextAlign::LEFT, "5 Min");
+
+          it.image(103, 130, id(icon_hourglass));
+          it.image(231, 130, id(icon_interval_off));
+          it.image(359, 130, id(icon_stopwatch_off));
+          it.image(487, 130, id(icon_tomato_off));
 
       - id: interval
         lambda: |-
           it.fill(id(background_color));
 
-          it.image(50, 65, id(icon_pause));
-          it.image(590, 65, id(icon_stop));
+          // Display current state (Work/Rest)
+          if (id(interval_running)) {
+            if (id(interval_is_work)) {
+              it.print(300, 50, id(title), TextAlign::CENTER, "Work");
+            } else {
+              it.print(300, 50, id(title), TextAlign::CENTER, "Rest");
+            }
+          } else {
+            it.print(300, 50, id(title), TextAlign::CENTER, "Stopped");
+          }
 
-          it.image(103, 130, id(icon_hourglass));
-          it.image(231, 130, id(icon_interval_on));
-          it.image(359, 130, id(icon_stopwatch));
-          it.image(487, 130, id(icon_tomato));
+          // Display remaining time
+          int minutes = id(interval_current_time) / 60;
+          int seconds = id(interval_current_time) % 60;
+          char time_str[6];
+          sprintf(time_str, "%02d:%02d", minutes, seconds);
+          it.print(300, 100, id(big_numbers), TextAlign::CENTER, time_str);
+
+          // Display current cycle
+          char cycle_str[16];
+          sprintf(cycle_str, "Cycle: %d/%d", id(interval_current_cycle) + 1, id(interval_repetitions));
+          it.print(300, 150, id(info), TextAlign::CENTER, cycle_str);
+
+          // Display configuration options
+          it.print(100, 200, id(info), TextAlign::LEFT, "Work: 1 Min");
+          it.print(200, 200, id(info), TextAlign::LEFT, "Rest: 30 Sec");
+          it.print(300, 200, id(info), TextAlign::LEFT, "Reps: 1");
+
+          it.image(103, 130, id(icon_hourglass_off));
+          it.image(231, 130, id(icon_interval));
+          it.image(359, 130, id(icon_stopwatch_off));
+          it.image(487, 130, id(icon_tomato_off));
 
       - id: tomato
         lambda: |-
           it.fill(id(background_color));
 
-          it.image(103, 130, id(icon_hourglass));
-          it.image(231, 130, id(icon_interval));
-          it.image(359, 130, id(icon_stopwatch));
-          it.image(487, 130, id(icon_tomato_on));
+          // Display current state (Work/Rest)
+          if (id(pomodoro_running)) {
+            if (id(pomodoro_is_work)) {
+              it.print(300, 50, id(big_numbers), Color(0xFF0000), TextAlign::CENTER, "BUSY");
+            } else {
+              it.print(300, 50, id(title), TextAlign::CENTER, "BREAK");
+            }
+          } else {
+            it.print(300, 50, id(title), TextAlign::CENTER, "Stopped");
+          }
+
+          // Display remaining time
+          int minutes = id(pomodoro_current_time) / 60;
+          int seconds = id(pomodoro_current_time) % 60;
+          char time_str[6];
+          sprintf(time_str, "%02d:%02d", minutes, seconds);
+          it.print(300, 100, id(big_numbers), TextAlign::CENTER, time_str);
+
+          // Display current cycle
+          char cycle_str[16];
+          sprintf(cycle_str, "Cycle: %d/4", id(pomodoro_current_cycle) + 1);
+          it.print(300, 150, id(info), TextAlign::CENTER, cycle_str);
+
+          it.image(103, 130, id(icon_hourglass_off));
+          it.image(231, 130, id(icon_interval_off));
+          it.image(359, 130, id(icon_stopwatch_off));
+          it.image(487, 130, id(icon_tomato));
