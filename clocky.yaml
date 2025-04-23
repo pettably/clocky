@@ -34,7 +34,8 @@ external_components:
       type: git
       url: https://github.com/pettably/clocky
       ref: main
-    components: [ axs15231 ]
+    components: [axs15231]
+    refresh: 0s
 
 # Enable logging
 logger:
@@ -278,29 +279,40 @@ color:
 
 
 # Icons
-
+image: 
   - file: 'images/hourglass.png'
     id: icon_hourglass
+    type: RGB
   - file: 'images/interval.png'
     id: icon_interval
+    type: RGB
   - file: 'images/stopwatch.png'
     id: icon_stopwatch
+    type: RGB
   - file: 'images/tomato.png'
     id: icon_tomato
+    type: RGB
   - file: 'images/hourglass_off.png'
     id: icon_hourglass_off
+    type: RGB
   - file: 'images/interval_off.png'
     id: icon_interval_off
+    type: RGB
   - file: 'images/stopwatch_off.png'
     id: icon_stopwatch_off
+    type: RGB
   - file: 'images/tomato_off.png'
     id: icon_tomato_off
+    type: RGB
   - file: 'images/play.png'
     id: icon_play
+    type: RGB
   - file: 'images/pause.png'
     id: icon_pause
+    type: RGB
   - file: 'images/stop.png'
     id: icon_stop
+    type: RGB
 
 
 # NTP Time server
@@ -487,7 +499,7 @@ binary_sensor:
     y_max: 180
     on_press:
       then:
-          - display.page.show: interval
+          - display.page.show: interval1
 
   # Start/Stop Interval Timer
   - platform: touchscreen
@@ -758,7 +770,7 @@ display:
           it.image(359, 130, id(icon_stopwatch_off));
           it.image(487, 130, id(icon_tomato_off));
 
-      - id: interval
+      - id: interval1
         lambda: |-
           it.fill(id(background_color));
 
