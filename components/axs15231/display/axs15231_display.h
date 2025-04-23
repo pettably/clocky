@@ -6,13 +6,16 @@
 #include "esphome/components/spi/spi.h"
 #include "esphome/components/display/display.h"
 #include "esphome/components/display/display_buffer.h"
+#include "esphome/components/quad_spi/quad_spi.h"
 
 namespace esphome {
 namespace axs15231 {
 
-class AXS15231Display : public display::DisplayBuffer,
-                        public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARITY_LOW,
-                                              spi::CLOCK_PHASE_LEADING, spi::DATA_RATE_20MHZ> {
+  class AXS15231Display : public display::DisplayBuffer,
+                          public Component,
+                          public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARITY_LOW,
+                                                spi::CLOCK_PHASE_LEADING, spi::DATA_RATE_20MHZ>,
+                          public quad_spi::QuadSPIDevice {
  public:
   void update() override;
 
