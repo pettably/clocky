@@ -2,14 +2,12 @@ substitutions:
 
 # Device customization
 
-  name: clocky
-  friendly_name: Clocky
   background_color: '000000'
 
 
 esphome:
-  name: ${name}
-  friendly_name: ${friendly_name}
+  name: clocky
+  friendly_name: Clocky
   platformio_options:
     upload_speed: 921600
     build_unflags: -Werror=all
@@ -17,9 +15,7 @@ esphome:
     board_build.f_flash: 80000000L
     board_build.f_cpu: 240000000L
 
-psram:
-  mode: octal
-  speed: 120MHz
+# Board must be set as devkit
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -27,19 +23,8 @@ esp32:
   framework:
     type: esp-idf
 
-# Must import the custom component for diplay
-
-external_components:
-  - source:
-      type: git
-      url: https://github.com/pettably/clocky
-      ref: main
-    components: [axs15231]
-    refresh: 0s
-
 # Enable logging
 logger:
-
 
 # WiFi configuration
 
@@ -47,12 +32,65 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
+# Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "Clocky Fallback Hotspot"
     password: "fallback"
 
 captive_portal:
+
+# Display set-up. Display is Quad_SPI with 4 data pins. The display is a AXS15231. This is now supported in ESPHome.
+# The display is connected to the ESP32-S3 via the QSPI interface. The display is 640x180 pixels.
+
+spi:
+  id: quad_spi
+  clk_pin: 17
+  type: quad
+  data_pins: [13, 18, 21, 14]
+
+i2c:
+  - sda: 9
+    scl: 48
+    id: lily_i2c
+  - sda: 15
+    scl: 10
+    id: touch_i2c
+
+touchscreen:
+  - platform: axs15231
+    id: lily_touch
+    display: lily_display
+    i2c_id: touch_i2c
+    interrupt_pin: GPIO11
+    transform:
+      mirror_x: false
+      mirror_y: false
+      swap_xy: true
+    on_touch:
+      - lambda: |-
+            ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
+            touch.x,
+            touch.y,
+            touch.x_raw,
+            touch.y_raw
+            );
+
+# Speed to be set to 80MHz. 120MHz is not supported and usually results in falling back to 40MHz.
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+# NTP Time server
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Australia/Melbourne
+    servers:
+     - 0.pool.ntp.org
+     - 1.pool.ntp.org
+     - 2.pool.ntp.org
 
 globals:
 
@@ -279,6 +317,8 @@ color:
 
 
 # Icons
+# Icons are 50x50 pixels. The icons are in RGB format. The icons are in the images directory.
+
 image: 
   - file: 'images/hourglass.png'
     id: icon_hourglass
@@ -313,51 +353,6 @@ image:
   - file: 'images/stop.png'
     id: icon_stop
     type: RGB
-
-
-# NTP Time server
-
-time:
-  - platform: sntp
-    id: sntp_time
-    timezone: Australia/Melbourne
-    servers:
-     - 0.pool.ntp.org
-     - 1.pool.ntp.org
-     - 2.pool.ntp.org
-
-# Display set-up
-
-spi:
-  - id: display_qspi
-    type: quad
-    clk_pin: 17
-    data_pins:
-      - 13
-      - 18
-      - 21
-      - 14
-
-i2c:
-  sda: 15
-  scl: 10
-  id: touchscreen_bus
-
-touchscreen:
-  - platform: axs15231
-    id: main_touch
-    display: main_display
-    i2c_id: touchscreen_bus
-    transform:
-      swap_xy: true
-    on_touch:
-      - lambda: |-
-          ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
-            touch.x,
-            touch.y,
-            touch.x_raw,
-            touch.y_raw
-          );
 
 
 binary_sensor:
@@ -697,17 +692,19 @@ light:
     restore_mode: ALWAYS_ON
     internal: True
 
+
+# Display set-up. Platform is QSPI_DBI. The display is a AXS15231. This is now supported in ESPHome.
+
 display:
-  - platform: axs15231
-    id: main_display
-    spi_id: display_qspi
+  - platform: qspi_dbi
+    model: AXS15231
+    id: lily_display
+    spi_id: quad_spi
     dimensions:
       height: 640
       width: 180
     cs_pin: 12
     reset_pin: 16
-    transform:
-      swap_xy: false
     rotation: 90
     auto_clear_enabled: false
     pages:
