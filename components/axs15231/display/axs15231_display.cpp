@@ -4,7 +4,14 @@
 #include "esphome/core/log.h"
 #include "esphome/components/display/display_color_utils.h"
 
-#ifdef USE_ESP_IDF
+#ifdef USE_QUAD_SPI
+  #include "esphome/components/quad_spi/quad_spi.h"
+  namespace bus = esphome::quad_spi;
+#else
+  #include "esphome/components/spi/spi.h"
+  namespace bus = esphome::spi;
+#endif
+
 
 namespace esphome {
 namespace axs15231 {

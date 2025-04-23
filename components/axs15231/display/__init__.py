@@ -2,11 +2,16 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 
 from esphome import pins
-from esphome.components import quad_spi
-from esphome.components import (
-    spi,
-    display,
-)
+from esphome.components import display
+
+# Try importing quad_spi first
+try:
+    from esphome.components import quad_spi
+    HAS_QUAD_SPI = True
+except ImportError:
+    from esphome.components import spi
+    HAS_QUAD_SPI = False
+
 from esphome.const import (
     CONF_RESET_PIN,
     CONF_OUTPUT,
@@ -24,26 +29,21 @@ from esphome.const import (
     CONF_SWAP_XY,
     CONF_TRANSFORM,
 )
+
 from .. import axs15231_ns
 
+DEPENDENCIES = ["quad_spi" if HAS_QUAD_SPI else "spi"]
 
-DEPENDENCIES = ["spi"]
+if HAS_QUAD_SPI:
+    BaseDevice = quad_spi.QuadSPIDevice
+else:
+    BaseDevice = spi.SPIDevice
 
 AXS15231Component = axs15231_ns.class_(
-    "AXS15231Display",
-    display.Display,
-    display.DisplayBuffer,
-    cg.Component,
-    spi.SPIDevice,
-    quad_spi.QuadSPIDevice
+    "AXS15231Display", display.Display, display.DisplayBuffer, cg.Component, BaseDevice
 )
 
-DATA_PIN_SCHEMA = pins.gpio_pin_schema(
-    {
-        CONF_OUTPUT: True,
-    },
-    internal=True,
-)
+DATA_PIN_SCHEMA = pins.gpio_pin_schema({CONF_OUTPUT: True}, internal=True)
 
 CONFIG_SCHEMA = cv.All(
     display.FULL_DISPLAY_SCHEMA.extend(
@@ -75,30 +75,27 @@ CONFIG_SCHEMA = cv.All(
                 ),
             }
         ).extend(
-            cv.Any(  # Allow either SPI or Quad SPI
-                spi.spi_device_schema(
-                    cs_pin_required=False,
-                    default_mode="MODE0",
-                    default_data_rate=20e6,
-                ),
-                quad_spi.quad_spi_device_schema(),
+            (quad_spi.quad_spi_device_schema if HAS_QUAD_SPI else spi.spi_device_schema)(
+                cs_pin_required=False,
+                default_mode="MODE0",
+                default_data_rate=20e6,
             )
         )
     ),
     cv.only_with_esp_idf,
 )
 
-
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await display.register_display(var, config)
 
-    if spi_id := config.get(spi.CONF_SPI_ID):
-        await spi.register_spi_device(var, config)
-    elif quad_spi_id := config.get(quad_spi.CONF_QUAD_SPI_ID):
+    if HAS_QUAD_SPI:
         await quad_spi.register_quad_spi_device(var, config)
+    else:
+        await spi.register_spi_device(var, config)
 
     cg.add(var.set_brightness(config[CONF_BRIGHTNESS]))
+
     if backlight_pin := config.get(CONF_BACKLIGHT_PIN):
         backlight = await cg.gpio_pin_expression(backlight_pin)
         cg.add(var.set_backlight_pin(backlight))
