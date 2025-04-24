@@ -29,8 +29,13 @@ logger:
 # WiFi configuration
 
 wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
+  networks:
+    - ssid: !secret wifi_ssid
+      password: !secret wifi_password
+      priority: 1
+    - ssid: !secret wifi_ssid_2
+      password: !secret wifi_password_2
+      priority: 0
 
 # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
@@ -38,6 +43,19 @@ wifi:
     password: "fallback"
 
 captive_portal:
+
+
+
+# Wireguard configuration. This is used to encrypt the connection between the ESP32 and the Home Assistant server.
+wireguard:
+  id: wireguard
+  private_key: !secret wg_private_key
+  peer_endpoint: !secret wg_endpoint
+  peer_public_key: !secret wg_public_key
+  netmask: !secret wg_netmask
+  peer_port: !secret wg_port
+
+
 
 # Display set-up. Display is Quad_SPI with 4 data pins. The display is a AXS15231. This is now supported in ESPHome.
 # The display is connected to the ESP32-S3 via the QSPI interface. The display is 640x180 pixels.
@@ -80,6 +98,20 @@ touchscreen:
 psram:
   mode: octal
   speed: 80MHz
+
+output:
+  - platform: ledc
+    pin: GPIO1
+    id: backlight_pwm
+    frequency: 100Hz  #Datasheet suggests low-frequency PWM. Should prevent stability issues.
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: Display
+    id: backlight
+    restore_mode: ALWAYS_ON
+    internal: True
 
 # NTP Time server
 
@@ -679,25 +711,14 @@ binary_sensor:
         - lambda: |-
             id(timer_time) = 300;
 
-output:
-  - platform: ledc
-    pin: GPIO1
-    id: backlight_pwm
-
-light:
-  - platform: monochromatic
-    output: backlight_pwm
-    name: Display
-    id: backlight
-    restore_mode: ALWAYS_ON
-    internal: True
-
 
 # Display set-up. Platform is QSPI_DBI. The display is a AXS15231. This is now supported in ESPHome.
+# Change Data_Rate to 80MHz. 10MH is default and this display supports much higher.
 
 display:
   - platform: qspi_dbi
     model: AXS15231
+    data_rate: 80MHz
     id: lily_display
     spi_id: quad_spi
     dimensions:
