@@ -2,7 +2,8 @@
 
 Simple desk and gym timer made with a LilyGO T-Display-S3-Long on Esphome.
 
-I'm using an 18650 battery to power the display and I 3D printed a small enclosure for it all.
+I'm using an 18650 battery to power the display and I 3D printed a small enclosure for it all (STL File included) plus added a small USB C socket on the back which i soldered onto the VCC and GND terminals next to the USB C socket on the rear of the display. 
+Just a note that the USB C socket will only work on chargers that aren't "smart" like power delivery. I use an old iPhone charging brick.
 
 # Functions
 
@@ -22,4 +23,4 @@ Esphome removed external componants, but luckily there is now a native componant
 
 Display must be set as 20Mhz. Any higher wont show correctly
 
-Timers resetting themselves - I noticed that the screen is psuhing against the enclosure which was causing ghost touches. Just had to pull the screen forward a bit.
+Timers resetting themselves - I noticed that the screen is pushing against the enclosure which was causing ghost touches. Just had to pull the screen forward a bit.
