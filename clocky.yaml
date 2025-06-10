@@ -1,0 +1,1150 @@
+api:
+  encryption:
+    key: !secret clocky_api
+
+ota:
+  - platform: esphome
+    password: !secret clocky_ota
+
+substitutions:
+
+# Device customization
+
+  background_color: '000000'
+
+
+esphome:
+  name: clocky
+  friendly_name: Clocky
+  platformio_options:
+    upload_speed: 921600
+    build_unflags: -Werror=all
+    board_build.flash_mode: qio
+    board_build.prsam_type: opi
+    board_build.f_flash: 80000000L
+    board_build.f_cpu: 240000000L
+
+# Board must be set as devkit
+
+esp32:
+  board: esp32-s3-devkitc-1
+  flash_size: 16MB
+  cpu_frequency: 240MHZ
+  framework:
+    type: esp-idf
+    advanced:
+      enable_idf_experimental_features: true
+
+# Enable logging
+
+logger:
+  level: DEBUG
+  logs:
+    esphome: INFO
+    "esphome.timer": DEBUG
+    "esphome.text_sensor": DEBUG
+
+# WiFi configuration
+
+wifi:
+  networks:
+    - ssid: !secret wifi_ssid
+      password: !secret wifi_password
+      priority: 1
+    - ssid: !secret wifi_ssid_2
+      password: !secret wifi_password_2
+      priority: 0
+
+# Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Clocky Fallback Hotspot"
+    password: "fallback"
+
+captive_portal:
+
+# Wireguard configuration. This is used to encrypt the connection between the ESP32 and the Home Assistant server.
+# Currently cant get this working. Must set reboot timeout as 0s or the device reboots itself 
+
+#wireguard:
+#  address: 10.0.0.4
+#  private_key: !secret wg_private_key
+#  peer_endpoint: !secret wg_endpoint
+#  peer_public_key: !secret wg_public_key
+#  peer_port: 33353  # Add explicit port number
+#  netmask: 0.0.0.0
+#  reboot_timeout: 0s
+
+
+# Display set-up. Display is Quad_SPI with 4 data pins. The display is a AXS15231. This is now supported in ESPHome.
+# The display is connected to the ESP32-S3 via the QSPI interface. The display is 640x180 pixels.
+
+spi:
+  id: quad_spi
+  clk_pin: 17
+  type: quad
+  data_pins: [13, 18, 21, 14]
+
+i2c:
+  - sda: 9
+    scl: 48
+    id: lily_i2c
+  - sda: 15
+    scl: 10
+    id: touch_i2c
+
+touchscreen:
+  - platform: axs15231
+    id: lily_touch
+    display: lily_display
+    i2c_id: touch_i2c
+    interrupt_pin: GPIO11
+    transform:
+      mirror_x: false
+      mirror_y: false
+      swap_xy: false
+    on_touch:
+      - lambda: |-
+            ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
+            touch.x,
+            touch.y,
+            touch.x_raw,
+            touch.y_raw
+            );
+
+# Speed to be set to 80MHz. 120MHz is not supported and usually results in falling back to 40MHz.
+
+psram:
+  mode: octal
+  speed: 80MHz
+  enable_ecc: True
+
+output:
+  - platform: ledc
+    pin: GPIO1
+    id: backlight_pwm
+    frequency: 100Hz  #Datasheet suggests low-frequency PWM. Should prevent stability issues.
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: Display
+    id: backlight
+    restore_mode: ALWAYS_ON
+    internal: True
+
+# NTP Time server
+
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: "Australia/Sydney"
+    servers:
+      - pool.ntp.org
+      - au.pool.ntp.org
+    on_time:
+      - seconds: 0
+        minutes: /1
+        then:
+          - lambda: |-
+              id(lily_display).update();  // Force update every minute
+
+globals:
+  - id: show_notification
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: notification_timeout
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: is_persistent_notification
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: current_page
+    type: std::string
+    restore_value: no
+    initial_value: '"home"'
+
+# STOPWATCH
+
+  - id: stopwatch_time
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: stopwatch_running
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+# TIMER
+  - id: timer_time
+    type: int
+    restore_value: no
+    initial_value: '60'
+  - id: timer_running
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: timer_flash_count
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  - id: timer_flash_state
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: selected_timer_time
+    type: int
+    restore_value: yes
+    initial_value: '60'  # Default to 1 minute
+       
+# INTERVAL
+
+  - id: interval_work_time
+    type: int
+    restore_value: no
+    initial_value: '60'  # Default work time: 1 minute
+  - id: interval_rest_time
+    type: int
+    restore_value: no
+    initial_value: '30'  # Default rest time: 30 seconds
+  - id: interval_repetitions
+    type: int
+    restore_value: no
+    initial_value: '1'  # Default repetitions: 1 cycle
+  - id: interval_current_time
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: interval_current_cycle
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: interval_is_work
+    type: bool
+    restore_value: no
+    initial_value: 'true'
+  - id: interval_running
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: interval_flash_count
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: interval_flash_state
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: selected_work_time
+    type: int
+    restore_value: no
+    initial_value: '60'
+  - id: selected_rest_time
+    type: int
+    restore_value: no
+    initial_value: '30'
+  - id: selected_cycles
+    type: int
+    restore_value: no
+    initial_value: '1'
+
+# POMODORO
+
+  - id: pomodoro_work_time
+    type: int
+    restore_value: no
+    initial_value: '1500'  # 25 minutes in seconds
+  - id: pomodoro_rest_time
+    type: int
+    restore_value: no
+    initial_value: '300'  # 5 minutes in seconds
+  - id: pomodoro_current_time
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: pomodoro_current_cycle
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: pomodoro_is_work
+    type: bool
+    restore_value: no
+    initial_value: 'true'
+  - id: pomodoro_running
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: pomodoro_flash_count
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: pomodoro_flash_state
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+text_sensor:
+  - platform: homeassistant
+    name: "Clocky Notification"
+    id: clocky_notification
+    entity_id: input_text.clocky_notification
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGI("notification", "Received notification: %s", x.c_str());
+            // Check if this is a phone call notification
+            if (x.find("Phone Call") != std::string::npos) {
+              id(is_persistent_notification) = true;
+              id(show_notification) = true;
+              id(lily_display).show_page(id(notification_page));
+            } else {
+              // Regular notification with timeout
+              id(is_persistent_notification) = false;
+              id(notification_timeout) = 5;
+              id(show_notification) = true;
+              id(lily_display).show_page(id(notification_page));
+            }
+
+interval:
+
+  - interval: 50ms  # Faster update interval for smoother animations
+    then:
+      - lambda: |-
+          if (id(timer_running) || id(interval_running) || id(pomodoro_running) || id(stopwatch_running)) {
+            id(lily_display).update();
+          }
+
+  - interval: 1s
+    then:
+      - lambda: |-
+          // Add overflow protection for all timer variables
+          if (id(stopwatch_running)) {
+            if (id(stopwatch_time) < 2147483647) {  // INT_MAX
+              id(stopwatch_time)++;
+            }
+          }
+          if (id(timer_running)) {
+            if (id(timer_time) > 0) {
+              id(timer_time)--;
+            } else {
+              id(timer_running) = false;
+              id(timer_time) = 0;
+              id(timer_flash_count) = 1;
+            }
+          }
+          if (id(interval_running)) {
+            if (id(interval_current_time) > 0) {
+              id(interval_current_time)--;
+            } else {
+              id(interval_flash_count) = 1;
+              if (id(interval_is_work)) {
+                id(interval_current_time) = id(interval_rest_time);
+                id(interval_is_work) = false;
+              } else {
+                id(interval_current_cycle)++;
+                if (id(interval_current_cycle) >= id(interval_repetitions)) {
+                  id(interval_running) = false;
+                  id(interval_current_time) = 0;
+                  id(interval_current_cycle) = 0;
+                  id(interval_is_work) = true;
+                } else {
+                  id(interval_current_time) = id(interval_work_time);
+                  id(interval_is_work) = true;
+                }
+              }
+            }
+          }
+          if (id(pomodoro_running)) {
+            if (id(pomodoro_current_time) > 0) {
+              id(pomodoro_current_time)--;
+            } else {
+              id(pomodoro_flash_count) = 1;
+              if (id(pomodoro_is_work)) {
+                id(pomodoro_current_time) = id(pomodoro_rest_time);
+                id(pomodoro_is_work) = false;
+              } else {
+                id(pomodoro_current_cycle)++;
+                if (id(pomodoro_current_cycle) >= 4) {
+                  id(pomodoro_running) = false;
+                  id(pomodoro_current_time) = 0;
+                  id(pomodoro_current_cycle) = 0;
+                  id(pomodoro_is_work) = true;
+                } else {
+                  id(pomodoro_current_time) = id(pomodoro_work_time);
+                  id(pomodoro_is_work) = true;
+                }
+              }
+            }
+          }
+          if (id(notification_timeout) > 0 && !id(is_persistent_notification)) {
+            id(notification_timeout)--;
+            if (id(notification_timeout) == 0) {
+              id(show_notification) = false;
+              if (id(current_page) == "home") {
+                id(lily_display).show_page(id(home_page));
+              } else if (id(current_page) == "stopwatch") {
+                id(lily_display).show_page(id(stopwatch_page));
+              } else if (id(current_page) == "timer") {
+                id(lily_display).show_page(id(timer_page));
+              } else if (id(current_page) == "interval1") {
+                id(lily_display).show_page(id(interval1_page));
+              } else if (id(current_page) == "tomato") {
+                id(lily_display).show_page(id(tomato_page));
+              }
+            }
+          }
+
+# Fonts
+
+font:
+  - file: "gfonts://Roboto"
+    id: clock_time
+    size: 60
+  - file: "gfonts://Roboto"
+    id: small_numbers
+    size: 40
+  - file: "gfonts://Roboto"
+    id: info
+    size: 20
+  - file: "gfonts://Roboto"
+    id: title
+    size: 25
+  - file: "gfonts://Roboto"
+    id: big_numbers
+    size: 80
+  - file: "gfonts://Roboto"
+    id: med_numbers
+    size: 60
+
+
+# Colours
+
+color:
+  - id: background_color
+    hex: ${background_color}
+
+  - id: orange
+    hex: 'e9c726'
+  - id: white
+    hex: 'ffffff'
+  - id: dirty_white
+    hex: 'c6c6c6'
+  - id: grey
+    hex: '222222'
+  - id: light_grey
+    hex: '444444'
+  - id: lime
+    hex: 'deff00'
+  - id: crimson
+    hex: 'f3528f'
+  - id: blue
+    hex: '52c0f3'
+  - id: dark_blue
+    hex: '1d85b6'
+  - id: magenta
+    hex: 'a91225'
+  - id: dark_magenta
+    hex: '440109'
+
+
+
+# Icons
+# Icons are 50x50 pixels. The icons are in RGB format. The icons are in the images directory.
+
+image: 
+  - file: 'images/hourglass.png'
+    id: icon_hourglass
+    type: RGB
+  - file: 'images/interval.png'
+    id: icon_interval
+    type: RGB
+  - file: 'images/stopwatch.png'
+    id: icon_stopwatch
+    type: RGB
+  - file: 'images/tomato.png'
+    id: icon_tomato
+    type: RGB
+  - file: 'images/hourglass_off.png'
+    id: icon_hourglass_off
+    type: RGB
+  - file: 'images/interval_off.png'
+    id: icon_interval_off
+    type: RGB
+  - file: 'images/stopwatch_off.png'
+    id: icon_stopwatch_off
+    type: RGB
+  - file: 'images/tomato_off.png'
+    id: icon_tomato_off
+    type: RGB
+  - file: 'images/play.png'
+    id: icon_play
+    type: RGB
+  - file: 'images/play_pause.png'
+    id: icon_play_pause
+    type: RGB
+  - file: 'images/pause.png'
+    id: icon_pause
+    type: RGB
+  - file: 'images/stop.png'
+    id: icon_stop
+    type: RGB
+
+
+binary_sensor:
+
+# STOPWATCH
+
+  - platform: touchscreen
+    name: Stopwatch button
+    internal: true
+    x_min: 0
+    x_max: 50
+    y_min: 0
+    y_max: 50
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              id(current_page) = "stopwatch";
+          - display.page.show: stopwatch_page
+
+  - platform: touchscreen
+    name: Stopwatch Play button
+    internal: true
+    x_min: 50
+    x_max: 150
+    y_min: 50
+    y_max: 150
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "stopwatch") {
+                id(stopwatch_running) = !id(stopwatch_running);
+              }
+
+  - platform: touchscreen
+    name: Stopwatch Stop button
+    internal: true
+    x_min: 490
+    x_max: 590
+    y_min: 50
+    y_max: 150
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "stopwatch") {
+                id(stopwatch_running) = false;
+                id(stopwatch_time) = 0;
+              }
+
+# TIMER
+
+  - platform: touchscreen
+    name: Timer button
+    internal: true
+    x_min: 0
+    x_max: 50
+    y_min: 130
+    y_max: 180
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              id(current_page) = "timer";
+          - display.page.show: timer_page
+
+  - platform: touchscreen
+    name: Timer 1 Min
+    internal: true
+    x_min: 50
+    x_max: 190
+    y_min: 160
+    y_max: 180
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "timer") {
+                id(timer_time) = 60;
+                id(selected_timer_time) = 60;
+              }
+
+  - platform: touchscreen
+    name: Timer 2 Min
+    internal: true
+    x_min: 200
+    x_max: 330
+    y_min: 160
+    y_max: 180
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "timer") {
+                id(timer_time) = 120;
+                id(selected_timer_time) = 120;
+              }
+
+  - platform: touchscreen
+    name: Timer 3 Min
+    internal: true
+    x_min: 340
+    x_max: 480
+    y_min: 160
+    y_max: 180
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "timer") {
+                id(timer_time) = 180;
+                id(selected_timer_time) = 180;
+              }
+
+  - platform: touchscreen
+    name: Timer 5 Min
+    internal: true
+    x_min: 490
+    x_max: 590
+    y_min: 160
+    y_max: 180
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "timer") {
+                id(timer_time) = 300;
+                id(selected_timer_time) = 300;
+              }
+
+  - platform: touchscreen
+    name: Timer Play button
+    internal: true
+    x_min: 50
+    x_max: 150
+    y_min: 50
+    y_max: 150
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "timer") {
+                id(timer_running) = !id(timer_running);
+              }
+
+  - platform: touchscreen
+    name: Timer Stop button
+    internal: true
+    x_min: 490
+    x_max: 590
+    y_min: 50
+    y_max: 150
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "timer") {
+                id(timer_running) = false;
+                id(timer_time) = 0;
+              }
+
+# INTERVAL
+
+  - platform: touchscreen
+    name: Interval button
+    internal: true
+    x_min: 590
+    x_max: 640
+    y_min: 0
+    y_max: 50
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              id(current_page) = "interval1";
+          - display.page.show: interval1_page
+
+  - platform: touchscreen
+    name: Interval Work 1 Min
+    internal: true
+    x_min: 50
+    x_max: 190
+    y_min: 10
+    y_max: 40
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "interval1") {
+                id(interval_work_time) = 60;
+                id(selected_work_time) = 60;
+              }
+
+  - platform: touchscreen
+    name: Interval Work 2 Min
+    internal: true
+    x_min: 200
+    x_max: 330
+    y_min: 10
+    y_max: 40
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "interval1") {
+                id(interval_work_time) = 120;
+                id(selected_work_time) = 120;
+              }
+
+  - platform: touchscreen
+    name: Interval Work 3 Min
+    internal: true
+    x_min: 340
+    x_max: 480
+    y_min: 10
+    y_max: 40
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "interval1") {
+                id(interval_work_time) = 180;
+                id(selected_work_time) = 180;
+              }
+
+  - platform: touchscreen
+    name: Interval Rest 30s
+    internal: true
+    x_min: 50
+    x_max: 190
+    y_min: 140
+    y_max: 170
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "interval1") {
+                id(interval_rest_time) = 30;
+                id(selected_rest_time) = 30;
+              }
+
+  - platform: touchscreen
+    name: Interval Rest 1 Min
+    internal: true
+    x_min: 200
+    x_max: 330
+    y_min: 140
+    y_max: 170
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "interval1") {
+                id(interval_rest_time) = 60;
+                id(selected_rest_time) = 60;
+              }
+
+  - platform: touchscreen
+    name: Interval Rest 2 Min
+    internal: true
+    x_min: 340
+    x_max: 480
+    y_min: 140
+    y_max: 170
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "interval1") {
+                id(interval_rest_time) = 120;
+                id(selected_rest_time) = 120;
+              }
+
+  - platform: touchscreen
+    name: Interval Cycles 1
+    internal: true
+    x_min: 490
+    x_max: 590
+    y_min: 40
+    y_max: 70
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "interval1") {
+                id(interval_repetitions) = 1;
+                id(selected_cycles) = 1;
+              }
+
+  - platform: touchscreen
+    name: Interval Cycles 2
+    internal: true
+    x_min: 490
+    x_max: 590
+    y_min: 80
+    y_max: 110
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "interval1") {
+                id(interval_repetitions) = 2;
+                id(selected_cycles) = 2;
+              }
+
+  - platform: touchscreen
+    name: Interval Cycles 3
+    internal: true
+    x_min: 490
+    x_max: 590
+    y_min: 120
+    y_max: 150
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "interval1") {
+                id(interval_repetitions) = 3;
+                id(selected_cycles) = 3;
+              }
+
+  - platform: touchscreen
+    name: Interval Play button
+    internal: true
+    x_min: 50
+    x_max: 150
+    y_min: 50
+    y_max: 150
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "interval1") {
+                if (!id(interval_running)) {
+                  id(interval_current_time) = id(interval_work_time);
+                  id(interval_current_cycle) = 0;
+                  id(interval_is_work) = true;
+                }
+                id(interval_running) = !id(interval_running);
+              }
+
+  - platform: touchscreen
+    name: Interval Stop button
+    internal: true
+    x_min: 490
+    x_max: 590
+    y_min: 50
+    y_max: 150
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "interval1") {
+                id(interval_running) = false;
+                id(interval_current_time) = 0;
+                id(interval_current_cycle) = 0;
+                id(interval_is_work) = true;
+              }
+
+# TOMATO
+
+  - platform: touchscreen
+    name: Tomato button
+    internal: true
+    x_min: 590
+    x_max: 640
+    y_min: 130
+    y_max: 180
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              id(current_page) = "tomato";
+          - display.page.show: tomato_page
+
+  - platform: touchscreen
+    name: Tomato Play button
+    internal: true
+    x_min: 50
+    x_max: 150
+    y_min: 50
+    y_max: 150
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "tomato" && !id(pomodoro_running)) {
+                id(pomodoro_current_time) = id(pomodoro_work_time);
+                id(pomodoro_current_cycle) = 0;
+                id(pomodoro_is_work) = true;
+                id(pomodoro_running) = true;
+              }
+
+  - platform: touchscreen
+    name: Tomato Stop button
+    internal: true
+    x_min: 590
+    x_max: 640
+    y_min: 50
+    y_max: 130
+    use_raw: true
+    on_press:
+      then:
+          - lambda: |-
+              if (id(current_page) == "tomato") {
+                id(pomodoro_running) = false;
+                id(pomodoro_current_time) = 0;
+                id(pomodoro_current_cycle) = 0;
+                id(pomodoro_is_work) = true;
+              }
+
+# Display set-up. Platform is QSPI_DBI. The display is a AXS15231. This is now supported in ESPHome.
+
+display:
+  - platform: qspi_dbi
+    model: AXS15231
+    data_rate: 20MHz
+    id: lily_display
+    spi_id: quad_spi
+    dimensions:
+      height: 640
+      width: 180
+    cs_pin: 12
+    reset_pin: 16
+    rotation: 270
+    auto_clear_enabled: false
+    pages:
+      - id: home_page
+        lambda: |-
+          it.fill(id(background_color));
+          it.strftime(320, 110, id(clock_time), TextAlign::CENTER, "%H:%M:%S", id(sntp_time).now());
+          it.strftime(320, 50, id(small_numbers), TextAlign::CENTER, "%d/%m/%y", id(sntp_time).now());
+
+          it.image(0, 0, id(icon_stopwatch));
+          it.image(0, 130, id(icon_hourglass));
+          it.image(590, 0, id(icon_interval));
+          it.image(590, 130, id(icon_tomato));
+
+      - id: stopwatch_page
+        lambda: |-
+          it.fill(id(background_color));
+
+          // Display stopwatch time
+          int hours = id(stopwatch_time) / 3600;
+          int minutes = (id(stopwatch_time) % 3600) / 60;
+          int seconds = id(stopwatch_time) % 60;
+          char time_str[9];
+          sprintf(time_str, "%02d:%02d:%02d", hours, minutes, seconds);
+          it.print(320, 90, id(big_numbers), TextAlign::CENTER, time_str);
+
+          // Display control icons
+          it.image(50, 65, id(icon_play_pause));  // Play/Pause button
+          it.image(540, 65, id(icon_stop));  // Stop button
+
+          it.image(0, 0, id(icon_stopwatch));
+          it.image(0, 130, id(icon_hourglass_off));
+          it.image(590, 0, id(icon_interval_off));
+          it.image(590, 130, id(icon_tomato_off));
+
+      - id: timer_page
+        lambda: |-
+          if (id(timer_flash_count) > 0 && id(timer_flash_state)) {
+            it.fill(Color(0x00FF00));  // Green flash
+          } else {
+            it.fill(id(background_color));
+
+            // Display timer time
+            int hours = id(timer_time) / 3600;
+            int minutes = (id(timer_time) % 3600) / 60;
+            int seconds = id(timer_time) % 60;
+            char time_str[9];
+            sprintf(time_str, "%02d:%02d:%02d", hours, minutes, seconds);
+            it.print(320, 90, id(big_numbers), TextAlign::CENTER, time_str);
+
+            // Display control icons
+            it.image(50, 65, id(icon_play_pause));  // Play/Pause button
+            it.image(540, 65, id(icon_stop));  // Stop button
+
+            // Display timer options
+            it.print(100, 160, id(info), TextAlign::CENTER, "1 Min");
+            it.print(240, 160, id(info), TextAlign::CENTER, "2 Min");
+            it.print(380, 160, id(info), TextAlign::CENTER, "3 Min");
+            it.print(520, 160, id(info), TextAlign::CENTER, "5 Min");
+
+            // Draw underline for selected time
+            if (id(selected_timer_time) == 60) {
+              it.line(90, 175, 130, 175, id(white));
+            } else if (id(selected_timer_time) == 120) {
+              it.line(230, 175, 270, 175, id(white));
+            } else if (id(selected_timer_time) == 180) {
+              it.line(370, 175, 410, 175, id(white));
+            } else if (id(selected_timer_time) == 300) {
+              it.line(510, 175, 550, 175, id(white));
+            }
+
+            it.image(0, 0, id(icon_stopwatch_off));
+            it.image(0, 130, id(icon_hourglass));
+            it.image(590, 0, id(icon_interval_off));
+            it.image(590, 130, id(icon_tomato_off));
+          }
+
+      - id: interval1_page
+        lambda: |-
+          if (id(interval_flash_count) > 0 && id(interval_flash_state)) {
+            it.fill(Color(0x00FF00));  // Green flash
+          } else {
+            it.fill(id(background_color));
+
+            // Display current state
+            if (id(interval_running)) {
+              if (id(interval_is_work)) {
+                it.print(320, 50, id(small_numbers), Color(0xFF0000), TextAlign::CENTER, "WORK");
+              } else {
+                it.print(320, 50, id(small_numbers), Color(0x00FF00), TextAlign::CENTER, "REST");
+              }
+            } else {
+              it.print(320, 50, id(title), TextAlign::CENTER, "Stopped");
+            }
+
+            // Display remaining time
+            int minutes = id(interval_current_time) / 60;
+            int seconds = id(interval_current_time) % 60;
+            char time_str[6];
+            sprintf(time_str, "%02d:%02d", minutes, seconds);
+            it.print(320, 100, id(med_numbers), TextAlign::CENTER, time_str);
+
+            // Display current cycle
+            if (id(interval_running)) {
+              char cycle_str[16];
+              sprintf(cycle_str, "Cycle: %d/%d", id(interval_current_cycle) + 1, id(interval_repetitions));
+              it.print(100, 85, id(info), TextAlign::CENTER, cycle_str);
+            }
+
+            // Display control icons
+            if (!id(interval_running)) {
+              it.image(75, 65, id(icon_play));  // Play button
+            }
+            if (id(interval_running)) {
+              it.image(540, 65, id(icon_stop));  // Stop button
+            }
+            
+
+            // Work time options
+            it.print(100, 20, id(info), TextAlign::CENTER, "1 Min");
+            it.print(240, 20, id(info), TextAlign::CENTER, "2 Min");
+            it.print(380, 20, id(info), TextAlign::CENTER, "3 Min");
+
+            // Draw underline for selected work time
+            if (id(selected_work_time) == 60) {
+              it.line(80, 35, 120, 35, id(white));
+            } else if (id(selected_work_time) == 120) {
+              it.line(220, 35, 260, 35, id(white));
+            } else if (id(selected_work_time) == 180) {
+              it.line(360, 35, 400, 35, id(white));
+            }
+
+            // Rest time options
+            it.print(100, 150, id(info), TextAlign::CENTER, "30s");
+            it.print(240, 150, id(info), TextAlign::CENTER, "1 Min");
+            it.print(380, 150, id(info), TextAlign::CENTER, "2 Min");
+
+            // Draw underline for selected rest time
+            if (id(selected_rest_time) == 30) {
+              it.line(80, 165, 120, 165, id(white));
+            } else if (id(selected_rest_time) == 60) {
+              it.line(220, 165, 260, 165, id(white));
+            } else if (id(selected_rest_time) == 120) {
+              it.line(360, 165, 400, 165, id(white));
+            }
+
+            // Cycle options
+            it.print(510, 10, id(info), TextAlign::CENTER, "CYCLES");
+            it.print(510, 50, id(info), TextAlign::CENTER, "1");
+            it.print(510, 100, id(info), TextAlign::CENTER, "2");
+            it.print(510, 150, id(info), TextAlign::CENTER, "3");
+
+            // Draw underline for selected cycles
+            if (id(selected_cycles) == 1) {
+              it.line(500, 65, 540, 65, id(white));
+            } else if (id(selected_cycles) == 2) {
+              it.line(500, 115, 540, 115, id(white));
+            } else if (id(selected_cycles) == 3) {
+              it.line(500, 165, 540, 165, id(white));
+            }
+
+            it.image(0, 0, id(icon_stopwatch_off));
+            it.image(0, 130, id(icon_hourglass_off));
+            it.image(590, 0, id(icon_interval));
+            it.image(590, 130, id(icon_tomato_off));
+          }
+
+      - id: tomato_page
+        lambda: |-
+          if (id(pomodoro_flash_count) > 0 && id(pomodoro_flash_state)) {
+            it.fill(Color(0x00FF00));  // Green flash
+          } else {
+            if (id(pomodoro_running) && id(pomodoro_is_work)) {
+              it.fill(id(magenta));  // Red background during work
+            } else {
+              it.fill(id(background_color));
+            }
+
+            // Display current state
+            if (id(pomodoro_running)) {
+              if (id(pomodoro_is_work)) {
+                it.print(320, 50, id(big_numbers), Color(0xFFFFFF), TextAlign::CENTER, "BUSY");
+              } else {
+                it.print(320, 50, id(title), TextAlign::CENTER, "BREAK");
+              }
+            } 
+
+            // Display remaining time or current time
+            if (id(pomodoro_running)) {
+              int minutes = id(pomodoro_current_time) / 60;
+              int seconds = id(pomodoro_current_time) % 60;
+              char time_str[6];
+              sprintf(time_str, "%02d:%02d", minutes, seconds);
+              it.print(320, 110, id(small_numbers), TextAlign::CENTER, time_str);
+            } else {
+              // Show current time when stopped
+          it.strftime(320, 85, id(big_numbers), TextAlign::CENTER, "%H:%M:%S", id(sntp_time).now());
+            }
+
+            // Display current cycle
+            if (id(pomodoro_running)) {
+              char cycle_str[16];
+              sprintf(cycle_str, "Pomodoro: %d/4", id(pomodoro_current_cycle) + 1);
+              it.print(320, 150, id(info), TextAlign::CENTER, cycle_str);
+            }
+
+            // Display control icons
+            if (!id(pomodoro_running)) {
+              it.image(50, 65, id(icon_play));  // Play button
+            }
+            if (id(pomodoro_running)) {
+              it.image(590, 65, id(icon_stop));  // Stop button
+            }
+            
+            it.image(0, 0, id(icon_stopwatch_off));
+            it.image(0, 130, id(icon_hourglass_off));
+            it.image(590, 0, id(icon_interval_off));
+            it.image(590, 130, id(icon_tomato));
+          }
+
+      - id: notification_page
+        lambda: |-
+          if (!id(is_persistent_notification)) {
+            it.fill(id(background_color));
+            it.print(320, 50, id(info), TextAlign::CENTER, "NOTIFICATION");
+            it.print(320, 100, id(info), TextAlign::CENTER, id(clocky_notification).state.c_str());
+            it.print(320, 150, id(info), TextAlign::CENTER, "Time remaining:");
+            it.printf(320, 170, id(info), TextAlign::CENTER, "%d", id(notification_timeout));
+          }
+          else {
+            it.fill(id(magenta));  // Red background during call
+            it.print(320, 50, id(big_numbers), Color(0xFFFFFF), TextAlign::CENTER, "ON THE PHONE");
+          }
